@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="AiMemoryManagment/AiMemoryManagment.csproj" />
+  <Project Path="MemoryManagment/MemoryManagment.csproj" />
+</Solution>
