@@ -6,20 +6,17 @@ using System.Text.Json;
 string historyPath = "chat_history.json";
 using HttpClient client = new HttpClient();
 
-string GROQ_API_KEY = Environment.GetEnvironmentVariable("GROQ_API_KEY");
+string GROQ_API_KEY = Environment.GetEnvironmentVariable("GROQ_API_KEY") ?? "";
 
 if (string.IsNullOrWhiteSpace(GROQ_API_KEY))
 {
     Console.WriteLine("❌ Error: GROQ_API_KEY environment variable is not set.");
     Console.WriteLine("💡 Set it with: $env:GROQ_API_KEY = 'your_key' in PowerShell");
-
+    Console.WriteLine("🔗 Get a free key: https://console.groq.com/keys");
     Environment.Exit(1);
 }
 
 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", GROQ_API_KEY);
-
-
-
 
 List<Message> history = new();
 
@@ -78,6 +75,16 @@ while (true)
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         var response = await client.PostAsync("https://api.groq.com/openai/v1/chat/completions", content);
+
+        if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+        {
+            Console.WriteLine($"\n⚠️ Rate limit exceeded! Please wait ~60 seconds.");
+            Console.WriteLine($"💡 Groq free tier: ~30 requests/minute");
+            history.RemoveAt(history.Count - 1);
+            await Task.Delay(60000);
+            continue;
+        }
+
         response.EnsureSuccessStatusCode();
 
         var responseJson = await response.Content.ReadAsStringAsync();
@@ -98,10 +105,32 @@ while (true)
 
         var saveOptions = new JsonSerializerOptions { WriteIndented = true };
         File.WriteAllText(historyPath, JsonSerializer.Serialize(history, saveOptions));
+
+        await Task.Delay(1000);
+
+    }
+    catch (HttpRequestException ex)
+    {
+        Console.WriteLine($"\n[Error]: Groq API request failed.");
+        Console.WriteLine($"Status: {ex.StatusCode}");
+        Console.WriteLine($"Details: {ex.Message}");
+
+        if (history.Count > 0 && history[^1].role == "user")
+            history.RemoveAt(history.Count - 1);
+    }
+    catch (JsonException ex)
+    {
+        Console.WriteLine($"\n[Error]: Failed to parse API response.");
+        Console.WriteLine($"Details: {ex.Message}");
+
+        if (history.Count > 0 && history[^1].role == "user")
+            history.RemoveAt(history.Count - 1);
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"\n[Error]: Connection failed. Ensure Ollama is running.");
-        Console.WriteLine($"Details: {ex.Message}");
+        Console.WriteLine($"\n[Error]: {ex.Message}");
+
+        if (history.Count > 0 && history[^1].role == "user")
+            history.RemoveAt(history.Count - 1);
     }
 }
